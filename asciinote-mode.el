@@ -56,7 +56,7 @@ Instead, it will be passed a filename as the final commandline option."
                    (erase-buffer))
                  (if (stringp an-command)
                      (call-process-region begin-region end-region
-                                          shell-file-name nil buf nil
+                                          "/bin/bash" nil buf nil
                                           shell-command-switch an-command)
                    (funcall an-command begin-region end-region buf)
                    ;; If there is no error from `an-command', assume the successful result with exit-code 0
@@ -85,8 +85,19 @@ Instead, it will be passed a filename as the final commandline option."
   (browse-url-of-buffer
    (an-standalone (or output-buffer-name an-output-buffer-name))))
 
+(defun an-preview-if-mode ()
+  "Run a preview job if the mode is asciinote-mode."
+  (interactive)
+  (if (derived-mode-p 'asciinote-mode)
+      (an-preview)
+    nil))
 
-(add-hook 'after-save-hook #'an-preview)
+(define-derived-mode asciinote-mode text-mode "Asciinote"
+  "Major mode for editing notes in Asciinote"
+  (add-hook 'after-save-hook #'an-preview-if-mode t t))
+
+
+(add-to-list 'auto-mode-alist '("\\.adoc\\'" . asciinote-mode))
 
 (provide 'asciinote-mode)
 ;;; asciinote-mode.el ends here
