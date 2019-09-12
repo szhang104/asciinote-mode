@@ -20,7 +20,8 @@
   :prefix "an-"
   :group 'text)
 
-(defcustom an-command "asciidoctor -"
+(defcustom an-command
+  "asciidoctor -"
   "Command to generate an HTML output. The default accepts input from stdin."
   :group 'asciinote
   :type '(choice (string :tag "Shell command")
@@ -32,65 +33,59 @@ Instead, it will be passed a filename as the final commandline option."
   :group 'asciinote
   :type 'boolean)
 
+(defun an-asciidoctor-command-string (input-file output-file &optional options)
+  "Return a command line string for invoking asciidoctor to build an `OUTPUT-FILE' from `INPUT-FILE' with `OPTIONS'. If the files are nil, `-' is provided to indicate the use of stdin and stdout"
+  (let ((outfn (or output-file "-"))
+        (infn (or input-file "-")))
+    (string-join (list "asciidoctor" options "-o" outfn infn) " ")))
 
-(defun an-run (&optional output-buffer-name)
-  "Run `an-command' on buffer, sending the output to OUTPUT-BUFFER-NAME."
-  (interactive)
-  (save-window-excursion
-    (let ((begin-region)
-          (end-region))
-      (setq begin-region (point-min)
-            end-region (point-max))
-      (unless output-buffer-name
-        (setq output-buffer-name an-output-buffer-name))
-      (let ((exit-code
-             (cond
-              ;; need to handle the case when `an-command' does not read from stdin
-              ((and (stringp an-command) an-command-needs-filename)
-               (user-error "Must use a file"))
-              ;; default case: pass region to `an-command' via stdin
-              (t
-               (let ((buf (get-buffer-create output-buffer-name)))
-                 (with-current-buffer buf
-                   (setq buffer-read-only nil)
-                   (erase-buffer))
-                 (if (stringp an-command)
-                     (call-process-region begin-region end-region
-                                          "/bin/bash" nil buf nil
-                                          shell-command-switch an-command)
-                   (funcall an-command begin-region end-region buf)
-                   ;; If there is no error from `an-command', assume the successful result with exit-code 0
-                   0))))))
-        (unless (eq exit-code 0)
-          (user-error "%s failed with exit code %s"
-                      an-command exit-code))))
-    output-buffer-name))
+(defun an-run-asciidoctor
+    (begin-region end-region to-buffer output-name &rest options)
+  "Run asciidoctor on region specified by `BEGIN-REGION' and `END-REGION'. If `TO-BUFFER' is not nil, `OUTPUT-NAME' is treated as a file name to write the outputput to; otherwise it is treated as a buffer name to dump the outputs. `OPTIONS' are options used by asciidoctor command line."
+       (if to-buffer
+           (let ((buf (get-buffer-create output-name)))
+             (with-current-buffer buf
+               (setq buffer-read-only nil)
+               (erase-buffer)
+               (call-process-region begin-region end-region
+                                    "/bin/bash" nil buf nil
+                                    shell-command-switch
+                                    (an-asciidoctor-command-string nil nil options))))
+         (let ((to-run (an-asciidoctor-command-string nil output-name options)))
+             (call-process-region begin-region end-region
+                              "/bin/bash" nil 1 nil
+                              shell-command-switch
+                              to-run)
+             (message "command: %s" to-run))))
 
 
 
-(defun an-standalone (&optional output-buffer-name)
-  "Provide standalone HTML output, and insert the output in the buffer named OUTPUT-BUFFER-NAME."
-  (interactive)
-  (setq output-buffer-name (an-run output-buffer-name))
-  (with-current-buffer output-buffer-name
-    (set-buffer output-buffer-name)
-    (goto-char (point-min))
-    (html-mode))
-  output-buffer-name)
 
-
-(defun an-preview (&optional output-buffer-name)
-  "Run the `an-command' on the current buffer and view the output in the browser. When OUTPUT-BUFFER-NAME is given, insert the output in the buffer with that name."
-  (interactive)
-  (browse-url-of-buffer
-   (an-standalone (or output-buffer-name an-output-buffer-name))))
+;; (defun an-preview (&optional output-buffer-name)
+;;   "Run the `an-command' on the current buffer and view the output in the browser. When OUTPUT-BUFFER-NAME is given, insert the output in the buffer with that name."
+;;   (interactive)
+;;   ;; (if (buffer-file-name)
+;;   ;;     (write-region (point-min) (point-max)
+;;   ;;                   (convert-standard-filename
+;;   ;;                    (make-temp-file
+;;   ;;                     (expand-file-name buffer-file-name temp-dir))) nil 'no-message))
+;;    (browse-url-of-buffer
+;;    (an-standalone (or output-buffer-name an-output-buffer-name))))
 
 (defun an-preview-if-mode ()
   "Run a preview job if the mode is asciinote-mode."
   (interactive)
   (if (derived-mode-p 'asciinote-mode)
-      (an-preview)
-    nil))
+      ;; if the buffer has a file, then generate a rendered html file
+      (if buffer-file-name
+          (let ((output-file-name
+                 (concat (file-name-sans-extension buffer-file-name) ".html")))
+            (an-run-asciidoctor (point-min) (point-max)
+                                nil output-file-name)
+            (browse-url-of-file output-file-name))
+        ;; if the buffer doesn't have a name, output to a temp buffer
+        (an-run-asciidoctor (point-min) (point-max)
+                            1 an-output-buffer-name))))
 
 (define-derived-mode asciinote-mode text-mode "Asciinote"
   "Major mode for editing notes in Asciinote"
