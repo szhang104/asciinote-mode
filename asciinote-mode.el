@@ -111,32 +111,42 @@
 (defvar an-header-face 'an-header-face
   "Face for base headers.")
 
+;; from asciidoc.conf: ^= +(?P<title>[\S].*?)( +=)?$
+;; asciidoc src code: Title.isnext reads two lines, which are then parsed by
+;; Title.parse. The second line is only for the underline of two line titles.
+(defun adoc-re-one-line-title (level)
+  "Returns a regex matching a one line title of the given LEVEL.
+When LEVEL is nil, a one line title of any level is matched.
+match-data has these sub groups:
+1 leading delimiter inclusive whites between delimiter and title text
+2 title's text exclusive leading/trailing whites
+3 trailing delimiter with all whites
+4 trailing delimiter only inclusive whites between title text and delimiter
+0 only chars that belong to the title block element
+==  my title  ==  n
+---12------23------
+            4--4"
+  (let* ((del (if level
+                 (make-string (+ level 1) ?=)
+               (concat "=\\{1," (+ adoc-title-max-level 1) "\\}"))))
+    (concat
+     "^\\(" del "[ \t]+\\)"		      ; 1
+     "\\([^ \t\n].*?\\)"                          ; 2
+     ;; using \n instad $ is important so group 3 is guaranteed to be at least 1
+     ;; char long (except when at the end of the buffer()). That is important to
+     ;; to have a place to put the text property adoc-reserved on.
+     "\\(\\([ \t]+" del "\\)?[ \t]*\\(?:\n\\|\\'\\)\\)" ))) ; 3 & 4
+
 (defvar an-regex-header
-  "^(=|#) (\w.*)$\n?")
+  "^\\(=\\|#\\) \\(\\w.*\\)$\\n?")
 
 (defun an-fontify-headings (last)
   "Add text properties to headings from point to LAST."
   )
 
-     (defface xxx
-       '((((class color) (min-colors 88) (background light))
-          :background "darkseagreen2")
-         (((class color) (min-colors 88) (background dark))
-          :background "darkolivegreen")
-         (((class color) (min-colors 16) (background light))
-          :background "darkseagreen2")
-         (((class color) (min-colors 16) (background dark))
-          :background "darkolivegreen")
-         (((class color) (min-colors 8))
-          :background "green" :foreground "black")
-         (t :inverse-video t))
-       "Basic face for highlighting."
-       :group 'basic-faces)
-
 (defvar an-mode-font-lock-keywords
   (list
-   (list an-regex-header  '('(1 xxx)
-                       '(2 font-lock-string-face))))
+    `(,(adoc-re-one-line-title 2) (1 font-lock-keyword-face)))
   "Syntax highlighting for asciinote mode.")
 
 (define-derived-mode asciinote-mode text-mode "Asciinote"
@@ -144,7 +154,7 @@
   (add-hook 'after-save-hook #'an-preview-if-mode t t)
   (setq font-lock-defaults
          '(an-mode-font-lock-keywords
-           nil nil nil nil
+           nil nil nil
            (font-lock-multiline t)
            )))
 
