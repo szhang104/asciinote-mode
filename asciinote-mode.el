@@ -27,17 +27,34 @@
   :type '(choice (string :tag "Shell command")
                  function))
 
-(defcustom an-command-needs-filename nil
-  "Set to non-nil if `an-command' does not accept input from stdin.
-Instead, it will be passed a filename as the final commandline option."
+(defcustom an-attributes
+  '(("linkcss" . nil)
+    ("docinfodir" . "/home/sz/docs/pensieve/assets")
+    ("docinfo" . "shared, private")
+    ("stylesdir" . "/home/sz/docs/pensieve/assets")
+    ("stylesheet" . "/home/sz/docs/pensieve/assets/ngismook.css"))
+  "Attributes added to the asciidoctor command line options. Overrides the attributes specified in the document."
   :group 'asciinote
-  :type 'boolean)
+  :type 'alist)
+
+
+(defun an-get-attributes (x)
+  "Return the command line option string of asciidoc attributes from an alist `X'."
+  (let ((parse-attributes (lambda (x)
+               (let ((key (car x))
+                     (val (cdr x)))
+                 (if val
+                     (format "--attribute %s=\"%s\"" key val)
+                   (format "--attribute %s" key))))))
+      (string-join (mapcar parse-attributes x) " ")))
+
 
 (defun an-asciidoctor-command-string (input-file output-file &optional options)
-  "Return a command line string for invoking asciidoctor to build an `OUTPUT-FILE' from `INPUT-FILE' with `OPTIONS'. If the files are nil, `-' is provided to indicate the use of stdin and stdout"
+  "Return a command line string to invoke asciidoctor to build the `OUTPUT-FILE' from `INPUT-FILE' with `OPTIONS'. If the files are nil, `-' is provided to indicate the use of stdin and stdout."
   (let ((outfn (or output-file "-"))
-        (infn (or input-file "-")))
-    (string-join (list "asciidoctor" options "-o" outfn infn) " ")))
+        (infn (or input-file "-"))
+        (attributes (an-get-attributes an-attributes)))
+    (string-join (list "asciidoctor" attributes options "-o" outfn infn) " ")))
 
 (defun an-run-asciidoctor
     (begin-region end-region to-buffer output-name &rest options)
@@ -55,8 +72,7 @@ Instead, it will be passed a filename as the final commandline option."
              (call-process-region begin-region end-region
                               "/bin/bash" nil 1 nil
                               shell-command-switch
-                              to-run)
-             (message "command: %s" to-run))))
+                              to-run))))
 
 
 
@@ -82,17 +98,55 @@ Instead, it will be passed a filename as the final commandline option."
                  (concat (file-name-sans-extension buffer-file-name) ".html")))
             (an-run-asciidoctor (point-min) (point-max)
                                 nil output-file-name)
-            (browse-url-of-file output-file-name))
+                (browse-url-of-file output-file-name))
         ;; if the buffer doesn't have a name, output to a temp buffer
         (an-run-asciidoctor (point-min) (point-max)
                             1 an-output-buffer-name))))
 
-(define-derived-mode asciinote-mode text-mode "Asciinote"
-  "Major mode for editing notes in Asciinote"
-  (add-hook 'after-save-hook #'an-preview-if-mode t t))
 
 
 (add-to-list 'auto-mode-alist '("\\.adoc\\'" . asciinote-mode))
+
+;;; Font lock
+(defvar an-header-face 'an-header-face
+  "Face for base headers.")
+
+(defvar an-regex-header
+  "^(=|#) (\w.*)$\n?")
+
+(defun an-fontify-headings (last)
+  "Add text properties to headings from point to LAST."
+  )
+
+     (defface xxx
+       '((((class color) (min-colors 88) (background light))
+          :background "darkseagreen2")
+         (((class color) (min-colors 88) (background dark))
+          :background "darkolivegreen")
+         (((class color) (min-colors 16) (background light))
+          :background "darkseagreen2")
+         (((class color) (min-colors 16) (background dark))
+          :background "darkolivegreen")
+         (((class color) (min-colors 8))
+          :background "green" :foreground "black")
+         (t :inverse-video t))
+       "Basic face for highlighting."
+       :group 'basic-faces)
+
+(defvar an-mode-font-lock-keywords
+  (list
+   (list an-regex-header  '('(1 xxx)
+                       '(2 font-lock-string-face))))
+  "Syntax highlighting for asciinote mode.")
+
+(define-derived-mode asciinote-mode text-mode "Asciinote"
+  "Major mode for editing notes in Asciinote"
+  (add-hook 'after-save-hook #'an-preview-if-mode t t)
+  (setq font-lock-defaults
+         '(an-mode-font-lock-keywords
+           nil nil nil nil
+           (font-lock-multiline t)
+           )))
 
 (provide 'asciinote-mode)
 ;;; asciinote-mode.el ends here
