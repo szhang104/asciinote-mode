@@ -28,7 +28,7 @@
                  function))
 
 (defcustom an-attributes
-  '(("linkcss" . nil)
+  '(("linkcss" . "")
     ("docinfodir" . "/home/sz/docs/pensieve/assets")
     ("docinfo" . "shared, private")
     ("stylesdir" . "/home/sz/docs/pensieve/assets")
@@ -137,6 +137,10 @@ match-data has these sub groups:
      ;; to have a place to put the text property adoc-reserved on.
      "\\(\\([ \t]+" del "\\)?[ \t]*\\(?:\n\\|\\'\\)\\)" ))) ; 3 & 4
 
+(defface an-doc-title
+  '((((class color) (min-colors 88)) :weight bold :foreground "orange"))
+  "document title face")
+
 (defvar an-regex-header
   "^\\(=\\|#\\) \\(\\w.*\\)$\\n?")
 
@@ -144,10 +148,23 @@ match-data has these sub groups:
   "Add text properties to headings from point to LAST."
   )
 
+(defun url-to-cite (url)
+  "Fetch the pdf or html from the given URL and parse it for the metainfo, and insert a proper asciidoc citation with these info."
+  )
+
+
+;; Syntax highlighting keywords for asciidoc mode
 (defvar an-mode-font-lock-keywords
   (list
-    `(,(adoc-re-one-line-title 2) (1 font-lock-keyword-face)))
-  "Syntax highlighting for asciinote mode.")
+   `(,(adoc-re-one-line-title 0)
+     (1 font-lock-keyword-face)
+     (2 'an-doc-title))
+   `(,(adoc-re-one-line-title 1)
+     (1 font-lock-keyword-face)
+     (2 'bold))
+   `(,(adoc-re-one-line-title 2)
+     (1 font-lock-keyword-face)
+     (2 'bold))))
 
 (define-derived-mode asciinote-mode text-mode "Asciinote"
   "Major mode for editing notes in Asciinote"
