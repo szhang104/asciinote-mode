@@ -111,6 +111,101 @@
 (defvar an-header-face 'an-header-face
   "Face for base headers.")
 
+;;; regexp generators from adoc-mode by sensorflo
+
+;; bug: if qualifier is "+", and the thing to match starts at the end of a
+;;      line (i.e. the first char is newline), then wrongly this regexp does
+;;      never match.
+;; Note: asciidoc uses Python's \s to determine blank lines, while _not_
+;;       setting either the LOCALE or UNICODE flag, see
+;;       Reader.skip_blank_lines. Python uses [ \t\n\r\f\v] for it's \s . So
+;;       the horizontal spaces are [ \t].
+(defun adoc-re-content (&optional qualifier)
+  "Matches content, possibly spawning multiple non-blank lines"
+  (concat
+   "\\(?:"
+   ;; content on initial line
+   "." (or qualifier "*") "?"
+   ;; if content spawns multiple lines
+   "\\(?:\n"
+     ;; complete non blank lines
+     "\\(?:[ \t]*\\S-.*\n\\)*?"
+     ;; leading content on last line
+     ".*?"
+   "\\)??"
+   "\\)"))
+
+(defun adoc-re-quote-precondition (not-allowed-chars)
+  "Regexp that matches before a (un)constrained quote delimiter.
+NOT-ALLOWED-CHARS are chars not allowed before the quote."
+  (concat
+     "\\(?:"
+       "^"
+     "\\|"
+       "\\="
+     "\\|"
+       ; or *not* after
+       ; - an backslash
+       ; - user defined chars
+       "[^" not-allowed-chars "\\\n]"
+     "\\)"))
+
+(defvar adoc-re-inline-attr
+  (rx (zero-or-one (group "[" (+? (not (any "]" "["))) "]"))))
+
+(defun adoc-re-unconstrained-quote (ldel &optional rdel)
+  (unless rdel (setq rdel ldel))
+  (let ((qldel (regexp-quote ldel))
+        (qrdel (regexp-quote rdel)))
+    (concat
+     (adoc-re-quote-precondition "")
+     ;"\\(\\[[^][]+?\\]\\)?"
+     adoc-re-inline-attr
+     "\\(" qldel "\\)"
+     "\\(" (adoc-re-content "+") "\\)"
+     "\\(" qrdel "\\)")))
+
+;; AsciiDoc src for constrained quotes
+;; # The text within constrained quotes must be bounded by white space.
+;; # Non-word (\W) characters are allowed at boundaries to accommodate
+;; # enveloping quotes.
+;;
+;; reo = re.compile(r'(?msu)(^|[^\w;:}])(\[(?P<attrlist>[^[\]]+?)\])?' \
+;;     + r'(?:' + re.escape(lq) + r')' \
+;;     + r'(?P<content>\S|\S.*?\S)(?:'+re.escape(rq)+r')(?=\W|$)')
+(defun adoc-re-constrained-quote (ldel &optional rdel)
+  "
+subgroups:
+1 attribute list [optional]
+2 starting del
+3 enclosed text
+4 closing del"
+  (unless rdel (setq rdel ldel))
+  (let ((qldel (regexp-quote ldel))
+        (qrdel (regexp-quote rdel)))
+    (concat
+     ;; added &<> because those are special chars which are substituted by a
+     ;; entity, which ends in ;, which is prohibited in the ascidoc.conf regexp
+     (adoc-re-quote-precondition "A-Za-z0-9;:}&<>")
+     ;; "\\(\\[[^][]+?\\]\\)?"
+     adoc-re-inline-attr
+     "\\(" qldel "\\)"
+     "\\([^ \t\n]\\|[^ \t\n]" (adoc-re-content) "[^ \t\n]\\)"
+     "\\(" qrdel "\\)"
+     ;; BUG: now that Emacs doesn't has look-ahead, the match is too long, and
+     ;; adjancted quotes of the same type wouldn't be recognized.
+     "\\(?:[^A-Za-z0-9\n]\\|[ \t]*$\\)")))
+
+(defun adoc-re-quote (type ldel &optional rdel)
+  (cond
+   ((eq type 'adoc-constrained)
+    (adoc-re-constrained-quote ldel rdel))
+   ((eq type 'adoc-unconstrained)
+    (adoc-re-unconstrained-quote ldel rdel))
+   (t
+    (error "Invalid type"))))
+
+
 ;; from asciidoc.conf: ^= +(?P<title>[\S].*?)( +=)?$
 ;; asciidoc src code: Title.isnext reads two lines, which are then parsed by
 ;; Title.parse. The second line is only for the underline of two line titles.
@@ -164,7 +259,13 @@ match-data has these sub groups:
      (2 'bold))
    `(,(adoc-re-one-line-title 2)
      (1 font-lock-keyword-face)
-     (2 'bold))))
+     (2 'bold))
+   `(,(adoc-re-quote 'adoc-constrained "*")
+     (1 font-lock-keyword-face t t) ; attr list
+     (2 font-lock-keyword-face) ; open del
+     (3 'bold) ;text
+     (4 font-lock-keyword-face) ; close
+                                )))
 
 (define-derived-mode asciinote-mode text-mode "Asciinote"
   "Major mode for editing notes in Asciinote"
