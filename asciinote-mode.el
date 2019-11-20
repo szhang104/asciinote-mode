@@ -98,7 +98,7 @@
                  (concat (file-name-sans-extension buffer-file-name) ".html")))
             (an-run-asciidoctor (point-min) (point-max)
                                 nil output-file-name)
-                (browse-url-of-file output-file-name))
+            )
         ;; if the buffer doesn't have a name, output to a temp buffer
         (an-run-asciidoctor (point-min) (point-max)
                             1 an-output-buffer-name))))
@@ -267,6 +267,19 @@ match-data has these sub groups:
      (4 font-lock-keyword-face) ; close
                                 )))
 
+(defun an-preview-browser ()
+  "Display the same-name file with html extension using the system default browser."
+  (interactive)
+  (let ((output-file-name
+         (concat (file-name-sans-extension buffer-file-name) ".html")))
+    (if (file-exists-p output-file-name)
+        (browse-url-of-file output-file-name)
+      (message (format-message
+                "The target file does not exist." output-file-name)))))
+
+(defvar asciinote-mode-map nil "Keymap for `asciinote-mode'")
+
+
 (define-derived-mode asciinote-mode text-mode "Asciinote"
   "Major mode for editing notes in Asciinote"
   (add-hook 'after-save-hook #'an-preview-if-mode t t)
@@ -275,6 +288,10 @@ match-data has these sub groups:
            nil nil nil
            (font-lock-multiline t)
            )))
+
+(setq asciinote-mode-map (make-sparse-keymap))
+;; I do not explicitly set the keymaps here. The users need to do it themselves.
+
 
 (provide 'asciinote-mode)
 ;;; asciinote-mode.el ends here
